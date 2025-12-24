@@ -43,19 +43,29 @@
         
         #start-btn {
             background: transparent;
-            color: #d4af37;
-            border: 1px solid #d4af37;
+            color: #666; /* 初始灰色，加载完变金 */
+            border: 1px solid #666;
             padding: 15px 40px;
             font-size: 1.2rem;
             letter-spacing: 3px;
             text-transform: uppercase;
-            cursor: pointer;
+            cursor: not-allowed; /* 初始不可点 */
             border-radius: 30px;
-            box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
             transition: all 0.3s;
+            pointer-events: none; /* 初始禁用 */
+        }
+        
+        /* 加载完成后的样式 */
+        #start-btn.ready {
+            color: #d4af37;
+            border-color: #d4af37;
+            cursor: pointer;
+            pointer-events: auto;
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
             animation: pulse 2s infinite;
         }
-        #start-btn:hover, #start-btn:active {
+
+        #start-btn.ready:hover, #start-btn.ready:active {
             background: #d4af37; color: #000; box-shadow: 0 0 40px rgba(212, 175, 55, 0.6);
         }
         
@@ -137,7 +147,8 @@
     <audio id="bgm" loop preload="auto" src="M800000C0OYj0ryzBx.mp3" style="display:none;"></audio>
 
     <div id="start-overlay">
-        <button id="start-btn" onclick="enterExperience()">撕开礼物</button>
+        <!-- [修改] 移除了 onclick 属性，改用 JS 绑定。添加了 ID 用于 JS 控制 -->
+        <button id="start-btn">资源加载中...</button>
         <div id="loading-text">INITIALIZING SYSTEMS...</div>
     </div>
 
@@ -157,7 +168,8 @@
             <input type="file" id="file-input" multiple accept="image/*">
         </div>
         <div id="mobile-controls">
-            <button class="action-btn primary" id="toggle-shape-btn" onclick="toggleShape()">聚合成树</button>
+            <!-- [修改] 移除了 onclick 属性 -->
+            <button class="action-btn primary" id="toggle-shape-btn">聚合成树</button>
         </div>
     </div>
 
@@ -171,7 +183,8 @@
 
         const isMobile = window.innerWidth < 768;
 
-         window.enterExperience = function() {
+        // [修改] 定义核心函数
+        function enterExperience() {
             const overlay = document.getElementById('start-overlay');
             const wrapper = document.documentElement;
             if (wrapper.requestFullscreen) { wrapper.requestFullscreen().catch(() => {}); }
@@ -193,8 +206,7 @@
                 document.getElementById('upload-btn').style.display = 'inline-block';
             }, 800);
             setupMediaPipe();
-        };
-
+        }
 
         const CONFIG = {
             goldCount: isMobile ? 300 : 600,     
@@ -249,7 +261,8 @@ data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgFBgcGBQgHBgcJCAgJDBMMD
         let handPos = { x: 0, y: 0 }, lastHandPos = { x: 0, y: 0 }, isHandPresent = false, rotationVelocity = { x: 0, y: 0 };
         let touchStart = { x: 0, y: 0 }, isTouching = false, initialPinchDistance = 0;
 
-        window.toggleShape = function() {
+        // [修改] 切换形状函数
+        function toggleShape() {
             const btn = document.getElementById('toggle-shape-btn');
             if (currentState === STATE.TREE) {
                 currentState = STATE.SCATTER;
@@ -263,7 +276,7 @@ data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgFBgcGBQgHBgcJCAgJDBMMD
                 btn.innerText = "星云散开"; btn.classList.add('active');
                 updateStatus("聚合圣诞树");
             }
-        };
+        }
 
         function updateStatus(text) { document.getElementById('status-text').innerHTML = `状态: <span class="highlight">${text}</span>`; }
 
@@ -487,11 +500,6 @@ data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgFBgcGBQgHBgcJCAgJDBMMD
                 });
 
                 const isPinch = Math.sqrt((lm[4].x-lm[8].x)**2 + (lm[4].y-lm[8].y)**2) < 0.1;
-                const btn = document.getElementById('toggle-shape-btn');
-                
-                // [修复逻辑] 优先判断握拳。
-                // 只有当 folded < 3 (手是半张开的) 时，才允许判定为 Pinch (Zoom)
-                // 只要 folded >= 3 (大部分手指卷起)，强制进入 Tree，无视 Pinch。
                 
                 if (folded >= 3) { 
                     if (currentState !== STATE.TREE) { 
@@ -501,6 +509,7 @@ data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgFBgcGBQgHBgcJCAgJDBMMD
                         mainGroup.rotation.x = 0;
                         mainGroup.rotation.z = 0;
                         updateStatus("聚合圣诞树"); 
+                        const btn = document.getElementById('toggle-shape-btn');
                         btn.innerText = "星云散开"; 
                         btn.classList.add('active'); 
                     } 
@@ -518,6 +527,7 @@ data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgFBgcGBQgHBgcJCAgJDBMMD
                         currentState = STATE.SCATTER; 
                         lastHandPos = {x:handPos.x, y:handPos.y}; 
                         updateStatus("星云散开"); 
+                        const btn = document.getElementById('toggle-shape-btn');
                         btn.innerText = "聚合成树"; 
                         btn.classList.remove('active'); 
                     } 
@@ -528,7 +538,23 @@ data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgFBgcGBQgHBgcJCAgJDBMMD
 
         function initPresets() { PRESET_PHOTOS.forEach(url => { const img = new Image(); img.crossOrigin = "anonymous"; img.src = url; img.onload = () => addPhotoMesh(img); }); }
 
-        initThree(); animate(); initPresets(); toggleShape();
+        // [修改] 资源加载完成后激活按钮
+        initThree(); 
+        animate(); 
+        initPresets();
+        
+        // 绑定事件
+        document.getElementById('start-btn').addEventListener('click', enterExperience);
+        document.getElementById('toggle-shape-btn').addEventListener('click', toggleShape);
+
+        // 模拟资源加载完成
+        setTimeout(() => {
+            const btn = document.getElementById('start-btn');
+            btn.innerText = "撕开礼物";
+            btn.classList.add('ready');
+            document.getElementById('loading-text').innerText = "SYSTEM READY";
+        }, 1500);
+
     </script>
 </body>
 </html>
