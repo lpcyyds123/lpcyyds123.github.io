@@ -2,22 +2,29 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Jewel Christmas Tree - Mobile Edition</title>
+    <!-- 关键：添加 theme-color 和 apple-mobile-web-app-capable 以支持更深度的全屏 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <title>Jewel Christmas - Immersive</title>
     <style>
         body { 
             margin: 0; 
             overflow: hidden; 
             background-color: #000; 
             font-family: 'Helvetica Neue', Arial, sans-serif; 
-            touch-action: none; /* 禁止浏览器默认的缩放和滚动 */
-        }
+            touch-action: none;
+            /* 使用 dvh 兼容手机浏览器地址栏 */
+            height: 100dvh;
+            width: 100vw;
 
-        /* 容器占满全屏 */
+        }
         #canvas-wrapper {
             position: relative;
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
+            height: 100%;
             background: #000;
             overflow: hidden;
         }
@@ -28,17 +35,50 @@
             display: block;
         }
         
-        /* 摄像头：在手机上稍微缩小并移动位置 */
+        /* 启动引导页（用于触发全屏） */
+        #start-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 100;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            transition: opacity 0.8s;
+        }
+        
+        #start-btn {
+            background: transparent;
+            color: #d4af37;
+            border: 1px solid #d4af37;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            cursor: pointer;
+            border-radius: 30px;
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
+            transition: all 0.3s;
+            animation: pulse 2s infinite;
+        }
+        #start-btn:hover, #start-btn:active {
+            background: #d4af37; color: #000; box-shadow: 0 0 40px rgba(212, 175, 55, 0.6);
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(212, 175, 55, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
+        }
+
+        /* 摄像头小窗口 */
         #video-container {
             position: absolute; top: 10px; right: 10px; 
-            width: 100px; height: 75px; 
+            width: 90px; height: 68px; 
             z-index: 2;
-            border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 6px; overflow: hidden;
-            transform: scaleX(-1); box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 6px; overflow: hidden;
+            transform: scaleX(-1);
             background: rgba(0,0,0,0.5);
-            transition: opacity 0.5s; 
+            /* 默认隐藏，等 MediaPipe 就绪再显示 */
+            opacity: 0; transition: opacity 0.5s;
         }
-        /* 平板或桌面保持稍大 */
         @media (min-width: 768px) {
             #video-container { width: 160px; height: 120px; top: 20px; right: 20px; }
         }
@@ -52,75 +92,68 @@
             z-index: 10;
         }
 
+        /* UI 层 */
         #ui-layer {
             position: absolute; top: 20px; left: 20px; z-index: 3; pointer-events: none;
             color: #fff; text-shadow: 0 0 10px rgba(0,0,0,0.8);
             transition: opacity 0.5s;
-            max-width: 70%;
+            max-width: 80%;
         }
 
         h1 {
-            font-weight: 200; letter-spacing: 2px; text-transform: uppercase; font-size: 1.5rem; margin: 0 0 10px 0;
+            font-weight: 200; letter-spacing: 2px; text-transform: uppercase; font-size: 1.4rem; margin: 0 0 8px 0;
             background: linear-gradient(to right, #fff, #d4af37, #fff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
 
-        .instructions {
-            font-size: 0.8rem; color: #eee; line-height: 1.5; 
-            background: rgba(20, 20, 20, 0.7); padding: 10px; border-radius: 8px;
-            border-left: 2px solid #d4af37; backdrop-filter: blur(5px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            display: none; /* 手机上默认隐藏详细说明，保持清爽 */
-        }
-        @media (min-width: 768px) {
-            h1 { font-size: 2.2rem; letter-spacing: 4px; }
-            .instructions { display: block; max-width: 320px; padding: 15px; font-size: 0.9rem;}
-        }
-
         .highlight { color: #d4af37; font-weight: bold; }
-        #status-text { margin-bottom: 10px; font-size: 0.9rem; color: #fff; font-weight: bold; }
+        #status-text { margin-bottom: 5px; font-size: 0.9rem; color: #fff; font-weight: bold; }
+        
+        /* 简化的移动端说明 */
+        .mobile-hint {
+            font-size: 0.75rem; color: #aaa; margin-top: 5px; line-height: 1.4;
+        }
 
-        /* 移动端控制按钮区域 */
+        /* 底部控制栏 */
         #mobile-controls {
-            position: absolute; bottom: 30px; left: 0; width: 100%;
-            display: flex; justify-content: center; gap: 15px;
+            position: absolute; bottom: 40px; left: 0; width: 100%;
+            display: flex; justify-content: center; gap: 20px;
             z-index: 20; pointer-events: auto;
         }
 
         .action-btn {
-            background: rgba(0,0,0,0.6); border: 1px solid #d4af37;
-            color: #d4af37; padding: 10px 20px; border-radius: 20px;
-            font-size: 0.9rem; text-transform: uppercase; cursor: pointer;
-            backdrop-filter: blur(4px); transition: 0.2s;
+            background: rgba(10,10,10,0.6); border: 1px solid #666;
+            color: #eee; padding: 12px 24px; border-radius: 30px;
+            font-size: 0.9rem; letter-spacing: 1px;
+            backdrop-filter: blur(8px); transition: 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
-        .action-btn:active, .action-btn.active { background: #d4af37; color: #000; }
+        .action-btn.primary {
+            border-color: #d4af37; color: #d4af37;
+        }
+        .action-btn:active, .action-btn.active { 
+            background: #d4af37; color: #000; border-color: #d4af37;
+            transform: scale(0.95);
+        }
 
         #upload-btn {
-            pointer-events: auto; background: linear-gradient(45deg, #444, #666); border: 1px solid #888;
-            color: #fff; padding: 8px 16px; cursor: pointer; text-transform: uppercase;
-            font-size: 0.75rem; margin-top: 15px; transition: 0.3s; 
-            letter-spacing: 1px; border-radius: 20px;
+            pointer-events: auto; display: inline-block;
+            background: rgba(255,255,255,0.1); border: 1px solid #555;
+            color: #ccc; padding: 6px 12px; cursor: pointer;
+            font-size: 0.7rem; margin-top: 10px; border-radius: 15px;
         }
-        #file-input { display: none; }
+
+        /* 加载文字 */
+        #loading-text {
+            margin-top: 20px; font-size: 0.8rem; color: #666; letter-spacing: 2px;
+        }
         
-        #loading {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #d4af37; font-size: 1rem; letter-spacing: 2px; z-index: 10; pointer-events: none; transition: opacity 0.5s;
-            text-align: center; width: 100%;
+        .hide-ui #ui-layer, .hide-ui #mobile-controls { opacity: 0; pointer-events: none; }
+        #file-input {
+            display: none;
         }
-
-        #fullscreen-btn {
-            position: absolute; top: 20px; right: auto; left: 50%; transform: translateX(-50%); 
-            z-index: 20; opacity: 0; pointer-events: none; /* 手机通常不需要这个按钮 */
-        }
-        @media (min-width: 768px) {
-            #fullscreen-btn { opacity: 1; pointer-events: auto; right: 200px; left: auto; transform: none; top: 30px;}
-        }
-
-        .hide-ui #ui-layer, 
-        .hide-ui #mobile-controls {
-            opacity: 0;
-            pointer-events: none;
-        }
+		#upload-btn{
+		display: none;
+		}
     </style>
     <!-- Import Map -->
     <script type="importmap">
@@ -134,6 +167,12 @@
 </head>
 <body>
 
+    <!-- 启动遮罩层：用于捕获用户点击以触发全屏 -->
+    <div id="start-overlay">
+        <button id="start-btn" onclick="enterExperience()">进入体验</button>
+        <div id="loading-text">INITIALIZING SYSTEMS...</div>
+    </div>
+
     <div id="canvas-wrapper">
         <div id="canvas-container"></div>
         
@@ -142,26 +181,19 @@
             <canvas id="skeleton-canvas"></canvas>
         </div>
 
-        <button id="fullscreen-btn" onclick="toggleUI()" title="切换沉浸模式">⛶</button>
-
         <div id="ui-layer">
             <h1>Jewel Christmas</h1>
-            <div id="status-text">系统初始化...</div>
-            <div class="instructions">
-                • <span class="highlight">握拳 / 点击按钮</span> : 聚合成树<br/>
-                • <span class="highlight">张手 / 点击按钮</span> : 星云散开<br/>
-                • <span class="highlight">单指划动</span> : 旋转视角<br/>
-                • <span class="highlight">双指捏合</span> : 抓取照片
+            <div id="status-text">状态: <span class="highlight">等待启动</span></div>
+            <div class="mobile-hint">
+                单指转动 • 双指捏合抓取
             </div>
-            <button id="upload-btn" onclick="document.getElementById('file-input').click()">+ 照片</button>
+            <button id="upload-btn" onclick="document.getElementById('file-input').click()">+ 添加照片</button>
             <input type="file" id="file-input" multiple accept="image/*">
         </div>
 
         <div id="mobile-controls">
-            <button class="action-btn" id="toggle-shape-btn" onclick="toggleShape()">聚合成树</button>
+            <button class="action-btn primary" id="toggle-shape-btn" onclick="toggleShape()">聚合成树</button>
         </div>
-
-        <div id="loading">CRAFTING JEWELS...</div>
     </div>
 
     <script type="module">
@@ -172,10 +204,36 @@
         import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
         import { FilesetResolver, HandLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0';
 
-        // --- 检测是否为移动端 ---
         const isMobile = window.innerWidth < 768;
 
-        // --- Config (根据设备性能调整粒子数) ---
+        // 全屏入口函数
+        window.enterExperience = function() {
+            const overlay = document.getElementById('start-overlay');
+            const wrapper = document.documentElement; // 全屏整个页面
+            
+            // 1. 尝试触发全屏
+            if (wrapper.requestFullscreen) {
+                wrapper.requestFullscreen().catch(err => console.log("全屏被拦截或不支持", err));
+            } else if (wrapper.webkitRequestFullscreen) { /* Safari */
+                wrapper.webkitRequestFullscreen();
+            } else if (wrapper.msRequestFullscreen) { /* IE11 */
+                wrapper.msRequestFullscreen();
+            }
+
+            // 2. 隐藏引导页
+            overlay.style.opacity = '0';
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                // 如果还未开始，这里可以开始一些逻辑
+                if(currentState === STATE.SCATTER) {
+                    updateStatus("星云散开");
+                }
+            }, 800);
+
+            // 3. 启动 MediaPipe（有些浏览器要求用户手势后才能动摄像头）
+            setupMediaPipe();
+        };
+
         const CONFIG = {
             goldCount: isMobile ? 300 : 600,     
             silverCount: isMobile ? 300 : 600,   
@@ -189,13 +247,11 @@
         const PRESET_PHOTOS = [
             "https://picsum.photos/id/10/400/300",
             "https://picsum.photos/id/20/400/300",
-            "https://picsum.photos/id/30/400/300",
-            "https://picsum.photos/id/40/400/300",
-            "https://picsum.photos/id/50/400/300"
+            "https://picsum.photos/id/30/400/300"
         ];
 
         const STATE = { TREE: 'tree', SCATTER: 'scatter', ZOOM: 'zoom' };
-        let currentState = STATE.SCATTER; // 初始改为散开状态，更震撼
+        let currentState = STATE.SCATTER; 
         
         let scene, camera, renderer, composer;
         let mainGroup = new THREE.Group();
@@ -209,22 +265,14 @@
         const dummy = new THREE.Object3D();
         let time = 0;
         
-        // 交互变量
         let handPos = { x: 0, y: 0 };
         let lastHandPos = { x: 0, y: 0 };
         let isHandPresent = false;
         let rotationVelocity = { x: 0, y: 0 };
 
-        // 触控变量
         let touchStart = { x: 0, y: 0 };
         let isTouching = false;
         let initialPinchDistance = 0;
-
-        // 全局控制函数
-        window.toggleUI = function() {
-            const wrapper = document.getElementById('canvas-wrapper');
-            wrapper.classList.toggle('hide-ui');
-        };
 
         window.toggleShape = function() {
             const btn = document.getElementById('toggle-shape-btn');
@@ -248,41 +296,28 @@
 
         function initThree() {
             const container = document.getElementById('canvas-container');
-            const wrapper = document.getElementById('canvas-wrapper');
             
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x020202); 
 
-            // 初始化相机
             camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-            // 手机上相机拉远一点，以便看到更多内容
-            camera.position.set(0, 0, isMobile ? 140 : 110);
+            camera.position.set(0, 0, isMobile ? 135 : 105);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            // 限制像素比，节省手机性能
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.0;
             container.appendChild(renderer.domElement);
 
             const pmremGenerator = new THREE.PMREMGenerator(renderer);
             scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.3));
-
             const spotLight = new THREE.SpotLight(0xffddaa, 80);
             spotLight.position.set(30, 60, 50);
-            spotLight.angle = Math.PI / 4;
             scene.add(spotLight);
-
-            const blueLight = new THREE.PointLight(0xaaddff, 40, 100);
-            blueLight.position.set(-30, -20, 30);
-            scene.add(blueLight);
             
-            // Post Processing
             const renderScene = new RenderPass(scene, camera);
-            // 手机上调低Bloom半径和强度以提升性能
             const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
             bloomPass.threshold = 0.4;
             bloomPass.strength = isMobile ? 0.4 : 0.6; 
@@ -295,12 +330,10 @@
             createMaterialsAndMeshes();
             createDust();
             createStarField();
-
             scene.add(mainGroup);
             
             window.addEventListener('resize', onWindowResize);
             
-            // 添加触控监听
             const cvs = renderer.domElement;
             cvs.addEventListener('touchstart', onTouchStart, {passive: false});
             cvs.addEventListener('touchmove', onTouchMove, {passive: false});
@@ -308,58 +341,46 @@
         }
 
         function onTouchStart(e) {
+            // 不要在按钮上阻止默认事件，否则按钮点不动
+            if (e.target.tagName === 'BUTTON') return;
             e.preventDefault();
             if (e.touches.length === 1) {
                 isTouching = true;
                 touchStart.x = e.touches[0].clientX;
                 touchStart.y = e.touches[0].clientY;
             } else if (e.touches.length === 2) {
-                // 双指捏合开始
                 initialPinchDistance = getPinchDistance(e);
             }
         }
 
         function onTouchMove(e) {
+            if (e.target.tagName === 'BUTTON') return;
             e.preventDefault();
             if (e.touches.length === 1 && isTouching) {
-                // 单指旋转
                 const deltaX = e.touches[0].clientX - touchStart.x;
                 const deltaY = e.touches[0].clientY - touchStart.y;
-                
-                // 将触摸位移转换为旋转速度
                 rotationVelocity.y += deltaX * 0.0005;
                 rotationVelocity.x += deltaY * 0.0005;
-
                 touchStart.x = e.touches[0].clientX;
                 touchStart.y = e.touches[0].clientY;
             } else if (e.touches.length === 2) {
-                // 双指缩放/抓取
                 const currentDist = getPinchDistance(e);
                 if (Math.abs(currentDist - initialPinchDistance) > 30) {
-                    // 如果是放大动作
                     if (currentDist > initialPinchDistance && currentState === STATE.SCATTER) {
                         enterZoomMode();
-                    } 
-                    // 如果是缩小动作
-                    else if (currentDist < initialPinchDistance && currentState === STATE.ZOOM) {
+                    } else if (currentDist < initialPinchDistance && currentState === STATE.ZOOM) {
                         currentState = STATE.SCATTER;
                         zoomTargetIndex = -1;
                         updateStatus("星云散开");
                     }
-                    initialPinchDistance = currentDist; // 重置防止抖动
+                    initialPinchDistance = currentDist;
                 }
             }
         }
 
-        function onTouchEnd(e) {
-            isTouching = false;
-        }
-
+        function onTouchEnd(e) { isTouching = false; }
         function getPinchDistance(e) {
-            return Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
+            return Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         }
 
         function enterZoomMode() {
@@ -367,7 +388,6 @@
                 currentState = STATE.ZOOM; 
                 updateStatus("抓取照片");
                 if (zoomTargetIndex === -1) {
-                    // 找到离相机最近的照片
                     let minDist = Infinity; let bestIdx = 0;
                     photoMeshes.forEach((mesh, idx) => {
                         const d = mesh.getWorldPosition(new THREE.Vector3()).distanceTo(camera.position);
@@ -402,8 +422,7 @@
             mainGroup.add(mesh);
             for (let i = 0; i < count; i++) {
                 const h = Math.random() * CONFIG.treeHeight - CONFIG.treeHeight/2;
-                const normH = (h + CONFIG.treeHeight/2) / CONFIG.treeHeight;
-                const rMax = CONFIG.maxRadius * (1 - normH);
+                const rMax = CONFIG.maxRadius * (1 - (h + CONFIG.treeHeight/2) / CONFIG.treeHeight);
                 const r = Math.sqrt(Math.random()) * rMax; 
                 const theta = Math.random() * Math.PI * 2;
                 dataArray.push({
@@ -482,9 +501,7 @@
                 logicData.star.rotation.y += 0.01;
             }
 
-            // 处理旋转逻辑 (手势或触控)
             if (currentState === STATE.SCATTER) {
-                // 如果检测到手，使用手势控制
                 if (isHandPresent) {
                     const deltaX = handPos.x - lastHandPos.x;
                     const deltaY = handPos.y - lastHandPos.y;
@@ -498,10 +515,7 @@
                 
                 mainGroup.rotation.y += rotationVelocity.y;
                 mainGroup.rotation.x += rotationVelocity.x;
-                
-                // 阻尼
-                rotationVelocity.y *= 0.96; 
-                rotationVelocity.x *= 0.96; 
+                rotationVelocity.y *= 0.96; rotationVelocity.x *= 0.96; 
             } else if (currentState === STATE.TREE) {
                 mainGroup.rotation.y += 0.003; 
                 mainGroup.rotation.x *= 0.95;
@@ -548,9 +562,7 @@
 
         function initPresets() {
             PRESET_PHOTOS.forEach(url => {
-                const img = new Image();
-                img.crossOrigin = "anonymous"; 
-                img.src = url;
+                const img = new Image(); img.crossOrigin = "anonymous"; img.src = url;
                 img.onload = () => addPhotoMesh(img);
             });
         }
@@ -579,41 +591,44 @@
             mainGroup.add(mesh);
         }
 
-        // --- Interaction ---
+        // --- MediaPipe Logic ---
+        let handLandmarker = null;
         async function setupMediaPipe() {
             try {
+                // 如果已经在加载了，就别重复加载
+                if(handLandmarker) return; 
+                
+                // 更新加载文字
+                const loadingTxt = document.getElementById('loading-text');
+                if(loadingTxt) loadingTxt.innerText = "ACTIVATING VISION...";
+
                 const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
-                const handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                handLandmarker = await HandLandmarker.createFromOptions(vision, {
                     baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" },
                     runningMode: "VIDEO", numHands: 1
                 });
-                const video = document.getElementById("input-video");
                 
-                // 仅当用户明确允许或非移动端时尝试高分辨率
+                const video = document.getElementById("input-video");
                 const constraints = { video: { facingMode: "user", width: isMobile ? 320 : 640 } };
                 
                 navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
                     video.srcObject = stream;
                     video.addEventListener("loadeddata", () => {
-                        document.getElementById('loading').style.display = 'none';
-                        updateStatus("系统就绪: 手势或触控");
-                        predictWebcam(handLandmarker, video);
+                        // 摄像头就绪后显示小窗口
+                        document.getElementById('video-container').style.opacity = 1;
+                        predictWebcam(video);
                     });
                 }).catch(err => {
-                    console.warn("Camera access denied or failed:", err);
-                    document.getElementById('loading').style.display = 'none';
+                    console.log("No camera:", err);
                     updateStatus("仅触控模式");
-                    document.getElementById('video-container').style.display = 'none';
                 });
             } catch (e) {
-                console.log("MediaPipe init error:", e);
-                document.getElementById('loading').style.display = 'none';
-                updateStatus("仅触控模式");
+                console.log("MediaPipe error:", e);
             }
         }
 
-        async function predictWebcam(handLandmarker, video) {
-            if(!video.videoWidth) { requestAnimationFrame(() => predictWebcam(handLandmarker, video)); return; }
+        async function predictWebcam(video) {
+            if(!video.videoWidth) { requestAnimationFrame(() => predictWebcam(video)); return; }
             let startTimeMs = performance.now();
             const result = handLandmarker.detectForVideo(video, startTimeMs);
             const canvas = document.getElementById('skeleton-canvas');
@@ -625,7 +640,7 @@
                 drawSkeleton(ctx, result.landmarks[0], canvas.width, canvas.height);
                 handleGesture(result.landmarks[0]);
             } else { isHandPresent = false; }
-            requestAnimationFrame(() => predictWebcam(handLandmarker, video));
+            requestAnimationFrame(() => predictWebcam(video));
         }
         
         function drawSkeleton(ctx, landmarks, w, h) {
@@ -644,14 +659,11 @@
             const palmY = (landmarks[0].y + landmarks[9].y) / 2;
             handPos.x = handPos.x * 0.8 + palmX * 0.2; handPos.y = handPos.y * 0.8 + palmY * 0.2;
             
-            // 简单手势逻辑
             let folded = 0;
             [8,12,16,20].forEach(i => { if(Math.sqrt(Math.pow(landmarks[i].x-landmarks[0].x,2) + Math.pow(landmarks[i].y-landmarks[0].y,2)) < 0.35) folded++; });
             const isPinch = Math.sqrt(Math.pow(landmarks[4].x-landmarks[8].x,2) + Math.pow(landmarks[4].y-landmarks[8].y,2)) < 0.1;
             
-            // 同步UI按钮状态
             const btn = document.getElementById('toggle-shape-btn');
-
             if (isPinch && currentState === STATE.SCATTER) {
                 enterZoomMode();
             } else if (folded >= 4) {
@@ -661,7 +673,6 @@
                     btn.innerText = "星云散开"; btn.classList.add('active');
                 }
             } else {
-                // 手掌张开
                 if(currentState === STATE.ZOOM && !isPinch) { 
                     currentState = STATE.SCATTER; zoomTargetIndex = -1; updateStatus("星云散开");
                 }
@@ -693,7 +704,6 @@
 
         initThree();
         animate();
-        setupMediaPipe();
         initPresets();
 		toggleShape()
     </script>
